@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#07040a">
+<title>S</title>
+<style>
+:root{--bg:#07040a;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#07040a}}
+:root[data-theme="dark"]{--bg:#07040a}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+html,body{height:100%;-webkit-text-size-adjust:100%;overscroll-behavior:none;margin:0;background:var(--bg);overflow:hidden;-webkit-tap-highlight-color:transparent}
+canvas{position:fixed;left:0;top:0;width:100%;height:100%;display:block;touch-action:none}
+
+.sig{position:fixed;right:max(18px,env(safe-area-inset-right,0px));bottom:max(18px,env(safe-area-inset-bottom,0px));pointer-events:none;user-select:none;-webkit-user-select:none;text-align:right;opacity:0;animation:sigIn 2.4s ease forwards 7.5s}
+.sig b{display:block;font:italic 600 clamp(15px,4vmin,24px)/1 Georgia,"Times New Roman",serif;letter-spacing:.38em;margin-right:-.38em;background:linear-gradient(100deg,#ff7ab8 0%,#ffd1e6 35%,#fff 50%,#ffd1e6 65%,#ff7ab8 100%);background-size:250% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent;filter:drop-shadow(0 0 6px rgba(255,90,170,.65));animation:sigShine 5s linear infinite 9s}
+.sig i{display:block;height:1px;margin:7px 0 0 auto;width:0;background:linear-gradient(90deg,transparent,#ff7ab8);animation:sigLine 1.6s ease forwards 8.6s}
+@keyframes sigIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes sigShine{from{background-position:150% 0}to{background-position:-100% 0}}
+@keyframes sigLine{to{width:100%}}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="sig"><b>AMZ</b><i></i></div>
+<script>
+const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+let W,H,dpr,U,cx,cy,T=0,t0=performance.now(),px=-999,py=-999;
+const N=10700,TAU=Math.PI*2;
+const f=()=>new Float32Array(N);
+const sx=f(),sy=f(),ax=f(),ay=f(),bx=f(),by=f(),d1=f(),d2=f(),ph=f(),lv=f(),sg=f();
+const bs=[0,1800,3600,5400,7200,9000,9567,10134,10700];
+const cols=['hsl(328,95%,62%)','hsl(322,90%,58%)','hsl(335,100%,66%)','hsl(318,85%,55%)','hsl(330,100%,70%)','hsl(326,95%,68%)','hsl(331,95%,72%)','hsl(321,90%,66%)'];
+const cl=v=>v<0?0:v>1?1:v;
+
+function sampleS(){
+  const o=document.createElement('canvas');o.width=o.height=400;
+  const c=o.getContext('2d');
+  c.fillStyle='#fff';c.font='bold 420px Georgia,"Times New Roman",serif';c.textAlign='center';
+  c.fillText('S',200,330);
+  const d=c.getImageData(0,0,400,400).data,pts=[];
+  let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
+  for(let y=0;y<400;y+=2)for(let x=0;x<400;x+=2)if(d[(y*400+x)*4+3]>128){
+    pts.push([x,y]);if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;
+  }
+  const s=1.7/(y1-y0),mx=(x0+x1)/2,my=(y0+y1)/2;
+  for(let i=pts.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[pts[i],pts[j]]=[pts[j],pts[i]];}
+  return pts.map(p=>[(p[0]-mx)*s,(p[1]-my)*s]);
+}
+
+function heartPt(){
+  const t=Math.random()*TAU,x=16*Math.pow(Math.sin(t),3);
+  const y=13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t);
+  return [x/17,-(y+2.5)/17];
+}
+
+const POLY=[];
+function inH(x,y){let c=false;for(let i=0,j=POLY.length-1;i<POLY.length;j=i++){const a=POLY[i],b=POLY[j];if((a[1]>y)!==(b[1]>y)&&x<(b[0]-a[0])*(y-a[1])/(b[1]-a[1])+a[0])c=!c;}return c;}
+function init(){
+  for(let i=0;i<300;i++){const t=i/300*TAU;POLY.push([16*Math.pow(Math.sin(t),3)/17,-(13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t)+2.5)/17]);}
+  const S=sampleS();
+  for(let i=0;i<N;i++){
+    const outline=i>=9000;
+    const [hx,hy]=heartPt();
+    let x=hx,y=hy;
+    if(outline){
+      const r=Math.hypot(x,y)||1,j=Math.pow(Math.random(),2)*0.05;
+      x+=x/r*j;y+=y/r*j;
+    }else{
+      let qx_,qy_;do{qx_=Math.random()*2-1;qy_=Math.random()*1.8-0.9;}while(!inH(qx_,qy_));x=qx_;y=qy_;
+    }
+    bx[i]=x;by[i]=y;
+    const p=S[i%S.length];
+    ax[i]=p[0]+(Math.random()-.5)*0.012;ay[i]=p[1]+(Math.random()-.5)*0.012;
+    const a=Math.random()*TAU,rad=1.8+Math.random()*2.2;
+    sx[i]=Math.cos(a)*rad;sy[i]=Math.sin(a)*rad;
+    d1[i]=Math.random()*0.6;
+    d2[i]=Math.random()*1.2;
+    ph[i]=Math.random()*TAU;lv[i]=0.5+Math.random()*0.9*(outline?1.0:1);
+    sg[i]=Math.random()<.5?-1:1;
+  }
+}
+
+function resize(){
+  dpr=Math.min(window.devicePixelRatio||1,2);
+  W=cv.clientWidth||innerWidth;H=cv.clientHeight||innerHeight;
+  cv.width=W*dpr;cv.height=H*dpr;
+  U=Math.min(W,H)*0.40;cx=W/2;cy=H/2;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.fillStyle='#07040a';ctx.fillRect(0,0,W,H);
+}
+
+const X=f(),Y=f(),L=f();
+function frame(ts){try{frame0(ts)}catch(e){window.onerror(String(e))}requestAnimationFrame(frame)}
+function frame0(ts){
+  T=Math.max(0,(ts-t0)/1000);const dt=Math.min(0.033,(ts-lastTs)/1000||0.016);lastTs=ts;pvx*=0.88;pvy*=0.88;const act=T>9&&px>-900;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.globalCompositeOperation='source-over';
+  ctx.globalAlpha=1;
+  ctx.fillStyle='rgba(7,4,10,0.3)';ctx.fillRect(0,0,W,H);
+
+  const b=0;
+  const R=Math.max(70,U*0.5);
+
+  for(let i=0;i<N;i++){
+    let x,y,e2=0,m=0,sc=0;
+    if(T<3.4){
+      const u=cl((T-d1[i])/1.7),e=1-Math.pow(1-u,3),k=(1-e)*e*1.6*sg[i]*0.3;
+      x=sx[i]+(ax[i]-sx[i])*e-sy[i]*k;
+      y=sy[i]+(ay[i]-sy[i])*e+sx[i]*k;
+    }else if(T<4.9){
+      const u=cl((T-3.4)/1.3),e=1-Math.pow(1-u,3),cX=sx[i]*0.45,cY=sy[i]*0.45;
+      x=ax[i]+(cX-ax[i])*e;
+      y=ay[i]+(cY-ay[i])*e;
+      sc=e;m=16*e*(1-e);
+    }else{
+      const u=cl((T-4.9-d2[i])/3.0),cX=sx[i]*0.45,cY=sy[i]*0.45;
+      e2=u<.5?4*u*u*u:1-Math.pow(-2*u+2,3)/2;
+      x=cX+(bx[i]-cX)*e2;
+      y=cY+(by[i]-cY)*e2;
+      sc=1-e2;m=22*e2*(1-e2);
+    }
+    const am=0.006+0.03*sc;
+    x+=Math.sin(T*2.1+ph[i])*am;y+=Math.cos(T*1.7+ph[i])*am;
+    const s=1+0.07*b*e2;x*=s;y*=s;
+    const r=Math.hypot(x,y)+1e-4;
+    let X0=cx+(x+OX[i])*U,Y0=cy+(y+OY[i])*U;
+    if(act){
+      const qx=X0-px,qy=Y0-py,q2=qx*qx+qy*qy;
+      if(q2<R*R){
+        const q=Math.sqrt(q2)+0.001,w=Math.pow(1-q/R,2)*dt*PM[i];
+        VX[i]+=qx/q*w*70+(pvx/U-VX[i])*Math.min(1,w*9);
+        VY[i]+=qy/q*w*70+(pvy/U-VY[i])*Math.min(1,w*9);
+      }
+    }
+    const kk=KS[i];
+    VX[i]+=(-OX[i]*kk-VX[i]*1.3)*dt;VY[i]+=(-OY[i]*kk-VY[i]*1.3)*dt;
+    OX[i]+=VX[i]*dt;OY[i]+=VY[i]*dt;
+    const spd=Math.hypot(VX[i],VY[i]),wt=cl(spd/0.35);
+    const len=1.5+(i<9000?0:6*e2)*lv[i]+m*lv[i];
+    const tl=1.5+Math.min(spd*U*0.035,16);
+    DX[i]=(x/r)*(1-wt)-(VX[i]/(spd+1e-4))*wt;
+    DY[i]=(y/r)*(1-wt)-(VY[i]/(spd+1e-4))*wt;
+    X[i]=X0;Y[i]=Y0;L[i]=len*(1-wt)+tl*wt;
+    // direction stored implicitly: radial
+    sx[i]=sx[i]; // no-op keeps arrays monomorphic
+    ph[i]=ph[i];
+    lv[i]=lv[i];
+    d1[i]=d1[i];
+    // store radial dir in temp via closure arrays below
+    
+  }
+  ctx.globalCompositeOperation='lighter';
+  const spv=cl((T-6.5)/3);
+  if(spv>0){
+    for(let i=0;i<NS;i++){
+      const tw=0.65+0.35*Math.sin(T*(0.6+SS[i]*0.9)+SP[i]);
+      const a=SB[i]*tw*spv*0.3;
+      const sv=2+SS[i]*7,gx=(((SX[i]*W+Math.cos(SP[i])*sv*T)%W)+W)%W,gy=(((SY[i]*H+Math.sin(SP[i])*sv*T)%H)+H)%H,r=SZ[i];
+      ctx.fillStyle=SC[i];
+      if(r>1.8){ctx.globalAlpha=a*0.18;ctx.beginPath();ctx.arc(gx,gy,r*3.2,0,TAU);ctx.fill();}
+      ctx.globalAlpha=a;ctx.beginPath();ctx.arc(gx,gy,r*0.5,0,TAU);ctx.fill();
+    }
+  }
+  ctx.lineWidth=1.3;ctx.lineCap='round';
+  for(let c=0;c<8;c++){
+    ctx.globalAlpha=c>=5?0.4:0.55;ctx.strokeStyle=cols[c];ctx.beginPath();
+    for(let i=bs[c];i<bs[c+1];i++){
+      ctx.moveTo(X[i],Y[i]);ctx.lineTo(X[i]+DX[i]*L[i],Y[i]+DY[i]*L[i]);
+    }
+    ctx.stroke();
+  }
+}
+const DX=f(),DY=f(),OX=f(),OY=f(),VX=f(),VY=f(),PM=f(),KS=f();
+for(let i=0;i<N;i++){PM[i]=0.6+Math.random()*0.8;KS[i]=1.0+Math.random()*1.2;}
+let pvx=0,pvy=0,lt=0,lastTs=0;
+const NS=180,SX=new Float32Array(NS),SY=new Float32Array(NS),SP=new Float32Array(NS),SS=new Float32Array(NS),SZ=new Float32Array(NS),SB=new Float32Array(NS),SC=[];
+const SCOL=['#ffffff','#dce8ff','#fff1dc','#ffd9e8'];
+for(let i=0;i<NS;i++){SX[i]=Math.random();SY[i]=Math.random();SP[i]=Math.random()*TAU;SS[i]=Math.random();SZ[i]=0.8+Math.pow(Math.random(),4)*2.4;SB[i]=0.25+0.75*Math.pow(Math.random(),3);SC.push(SCOL[Math.random()*4|0]);}
+
+addEventListener('resize',resize);
+addEventListener('orientationchange',()=>setTimeout(resize,300));
+window.onerror=m=>{document.body.insertAdjacentHTML('beforeend','<pre style="position:fixed;left:8px;top:8px;right:8px;margin:0;color:#f9a;font:12px monospace;white-space:pre-wrap">'+m+'</pre>');};
+cv.addEventListener('pointermove',e=>{const r=cv.getBoundingClientRect(),nx=e.clientX-r.left,ny=e.clientY-r.top,n=performance.now(),d=Math.max(8,n-lt)/1000;if(px>-900){pvx=pvx*0.5+((nx-px)/d)*0.5;pvy=pvy*0.5+((ny-py)/d)*0.5;}px=nx;py=ny;lt=n;});
+cv.addEventListener('pointerleave',()=>{px=py=-999;});
+cv.addEventListener('pointerdown',e=>{
+  const r=cv.getBoundingClientRect();px=e.clientX-r.left;py=e.clientY-r.top;
+  pvx=pvy=0;lt=performance.now();
+  if(T>9){const R2=Math.max(140,U*0.9);for(let i=0;i<N;i++){const qx=X[i]-px,qy=Y[i]-py,q=Math.hypot(qx,qy)+0.001;if(q<R2){const w=Math.pow(1-q/R2,2);VX[i]+=qx/q*w*3.2*PM[i];VY[i]+=qy/q*w*3.2*PM[i];}}}
+});
+cv.addEventListener('pointerup',()=>{if(matchMedia('(pointer:coarse)').matches){px=py=-999;}});
+resize();init();requestAnimationFrame(frame);setTimeout(resize,200);
+</script>
+</body>
+</html>
