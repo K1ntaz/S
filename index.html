@@ -21,17 +21,22 @@ canvas{position:fixed;left:0;top:0;width:100%;height:100%;display:block;touch-ac
 @keyframes sigIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @keyframes sigShine{from{background-position:150% 0}to{background-position:-100% 0}}
 @keyframes sigLine{to{width:100%}}
+
+.mute{position:fixed;left:max(16px,env(safe-area-inset-left,0px));bottom:max(16px,env(safe-area-inset-bottom,0px));width:38px;height:38px;border-radius:50%;border:1px solid rgba(255,120,180,.4);background:rgba(255,255,255,.06);color:#ffd1e6;font-size:17px;line-height:1;padding:0;display:flex;align-items:center;justify-content:center;opacity:0;animation:sigIn 2.4s ease forwards 7.5s;-webkit-tap-highlight-color:transparent;cursor:pointer}
+.hap{position:fixed;left:-100px;top:-100px;width:1px;height:1px;opacity:.01;pointer-events:none}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
+<button class="mute" id="mute" aria-label="sound">🔊</button>
+<label class="hap" id="hapL"><input type="checkbox" switch id="hapI"></label>
 <div class="sig"><b>AMZ</b><i></i></div>
 <script>
-const cv=document.getElementById('c'),ctx=cv.getContext('2d');
-let W,H,dpr,U,cx,cy,T=0,t0=performance.now(),px=-999,py=-999;
+const cv=document.getElementById('c'),ctx=cv.getContext('2d',{alpha:false});
+let cnt=0,tSw=-1e9,nmode=0,NBs=0,armed=true,lastSw=-1e9,FT=0.18,DT2=0.16,DPRMAX=2,Q=1,lastRaf=0,aw=0,ad=0,an=0,W,H,dpr,U,cx,cy,T=0,t0=performance.now(),px=-999,py=-999;
 const N=10700,TAU=Math.PI*2;
 const f=()=>new Float32Array(N);
-const sx=f(),sy=f(),ax=f(),ay=f(),bx=f(),by=f(),d1=f(),d2=f(),ph=f(),lv=f(),sg=f();
+const NX=f(),NY=f(),sx=f(),sy=f(),ax=f(),ay=f(),bx=f(),by=f(),d1=f(),d2=f(),ph=f(),lv=f(),sg=f();
 const bs=[0,1800,3600,5400,7200,9000,9567,10134,10700];
 const cols=['hsl(328,95%,62%)','hsl(322,90%,58%)','hsl(335,100%,66%)','hsl(318,85%,55%)','hsl(330,100%,70%)','hsl(326,95%,68%)','hsl(331,95%,72%)','hsl(321,90%,66%)'];
 const cl=v=>v<0?0:v>1?1:v;
@@ -51,6 +56,22 @@ function sampleS(){
   return pts.map(p=>[(p[0]-mx)*s,(p[1]-my)*s]);
 }
 
+function sampleName(){
+  const o=document.createElement('canvas');o.width=900;o.height=300;
+  const c=o.getContext('2d');
+  c.fillStyle='#fff';c.font='italic bold 210px Georgia,"Times New Roman",serif';c.textAlign='center';
+  c.fillText('Samira',450,210);
+  const d=c.getImageData(0,0,900,300).data,pts=[];
+  let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
+  for(let y=0;y<300;y+=2)for(let x=0;x<900;x+=2)if(d[(y*900+x)*4+3]>128){
+    pts.push([x,y]);if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;
+  }
+  if(!pts.length)pts.push([450,150],[451,150]),x0=449,x1=452,y0=y1=150;
+  const s=1.7/Math.max(1,x1-x0),mx=(x0+x1)/2,my=(y0+y1)/2;
+  for(let i=pts.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[pts[i],pts[j]]=[pts[j],pts[i]];}
+  return pts.map(p=>[(p[0]-mx)*s,(p[1]-my)*s]);
+}
+
 function heartPt(){
   const t=Math.random()*TAU,x=16*Math.pow(Math.sin(t),3);
   const y=13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t);
@@ -61,7 +82,7 @@ const POLY=[];
 function inH(x,y){let c=false;for(let i=0,j=POLY.length-1;i<POLY.length;j=i++){const a=POLY[i],b=POLY[j];if((a[1]>y)!==(b[1]>y)&&x<(b[0]-a[0])*(y-a[1])/(b[1]-a[1])+a[0])c=!c;}return c;}
 function init(){
   for(let i=0;i<300;i++){const t=i/300*TAU;POLY.push([16*Math.pow(Math.sin(t),3)/17,-(13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t)+2.5)/17]);}
-  const S=sampleS();
+  const S=sampleS(),NM=sampleName();
   for(let i=0;i<N;i++){
     const outline=i>=9000;
     const [hx,hy]=heartPt();
@@ -75,6 +96,7 @@ function init(){
     bx[i]=x;by[i]=y;
     const p=S[i%S.length];
     ax[i]=p[0]+(Math.random()-.5)*0.012;ay[i]=p[1]+(Math.random()-.5)*0.012;
+    const nq=NM[i%NM.length];NX[i]=nq[0]+(Math.random()-.5)*0.012;NY[i]=nq[1]+(Math.random()-.5)*0.012;
     const a=Math.random()*TAU,rad=1.8+Math.random()*2.2;
     sx[i]=Math.cos(a)*rad;sy[i]=Math.sin(a)*rad;
     d1[i]=Math.random()*0.6;
@@ -85,7 +107,7 @@ function init(){
 }
 
 function resize(){
-  dpr=Math.min(window.devicePixelRatio||1,2);
+  dpr=Math.min(window.devicePixelRatio||1,DPRMAX);
   W=cv.clientWidth||innerWidth;H=cv.clientHeight||innerHeight;
   cv.width=W*dpr;cv.height=H*dpr;
   U=Math.min(W,H)*0.40;cx=W/2;cy=H/2;
@@ -94,65 +116,98 @@ function resize(){
 }
 
 const X=f(),Y=f(),L=f();
-function frame(ts){try{frame0(ts)}catch(e){window.onerror(String(e))}requestAnimationFrame(frame)}
+const END=new Int32Array(8);
+function adapt(d,w){
+  if(T<2)return;
+  aw+=w;if(d<40)ad+=d;an++;
+  if(an>=40){const wa=aw/an,da=ad/an;aw=ad=an=0;
+    if(wa>7&&Q>0.5){Q=Math.max(0.5,Q*0.87);}
+    else if(da>19&&wa<=7&&DPRMAX>1.25){DPRMAX=DPRMAX>1.5?1.5:1.25;resize();}
+  }
+}
+function frame(ts){const d=ts-lastRaf;lastRaf=ts;try{const w=frame0(ts);adapt(d,w)}catch(e){window.onerror(String(e))}requestAnimationFrame(frame)}
 function frame0(ts){
-  T=Math.max(0,(ts-t0)/1000);const dt=Math.min(0.033,(ts-lastTs)/1000||0.016);lastTs=ts;pvx*=0.88;pvy*=0.88;const act=T>9&&px>-900;
+  const w0=performance.now();
+  T=Math.max(0,(ts-t0)/1000);const dt=Math.min(0.033,(ts-lastTs)/1000||0.016);lastTs=ts;
+  const dk=Math.pow(0.88,dt*60);pvx*=dk;pvy*=dk;
+  const act=T>9&&px>-900,TT=T;
   ctx.setTransform(dpr,0,0,dpr,0,0);
   ctx.globalCompositeOperation='source-over';
   ctx.globalAlpha=1;
-  ctx.fillStyle='rgba(7,4,10,0.3)';ctx.fillRect(0,0,W,H);
-
-  const b=0;
-  const R=Math.max(70,U*0.5);
-
-  for(let i=0;i<N;i++){
-    let x,y,e2=0,m=0,sc=0;
-    if(T<3.4){
-      const u=cl((T-d1[i])/1.7),e=1-Math.pow(1-u,3),k=(1-e)*e*1.6*sg[i]*0.3;
-      x=sx[i]+(ax[i]-sx[i])*e-sy[i]*k;
-      y=sy[i]+(ay[i]-sy[i])*e+sx[i]*k;
-    }else if(T<4.9){
-      const u=cl((T-3.4)/1.3),e=1-Math.pow(1-u,3),cX=sx[i]*0.45,cY=sy[i]*0.45;
-      x=ax[i]+(cX-ax[i])*e;
-      y=ay[i]+(cY-ay[i])*e;
-      sc=e;m=16*e*(1-e);
-    }else{
-      const u=cl((T-4.9-d2[i])/3.0),cX=sx[i]*0.45,cY=sy[i]*0.45;
-      e2=u<.5?4*u*u*u:1-Math.pow(-2*u+2,3)/2;
-      x=cX+(bx[i]-cX)*e2;
-      y=cY+(by[i]-cY)*e2;
-      sc=1-e2;m=22*e2*(1-e2);
-    }
-    const am=0.006+0.03*sc;
-    x+=Math.sin(T*2.1+ph[i])*am;y+=Math.cos(T*1.7+ph[i])*am;
-    const s=1+0.07*b*e2;x*=s;y*=s;
-    const r=Math.hypot(x,y)+1e-4;
-    let X0=cx+(x+OX[i])*U,Y0=cy+(y+OY[i])*U;
-    if(act){
-      const qx=X0-px,qy=Y0-py,q2=qx*qx+qy*qy;
-      if(q2<R*R){
-        const q=Math.sqrt(q2)+0.001,w=Math.pow(1-q/R,2)*dt*PM[i];
-        VX[i]+=qx/q*w*70+(pvx/U-VX[i])*Math.min(1,w*9);
-        VY[i]+=qy/q*w*70+(pvy/U-VY[i])*Math.min(1,w*9);
+  ctx.fillStyle='rgba(7,4,10,'+(1-Math.pow(0.7,dt*60)).toFixed(3)+')';ctx.fillRect(0,0,W,H);
+  const R=Math.max(70,U*0.5),R2=R*R,pU=pvx/U,pV=pvy/U;
+  let far=0,tot=0;const DUR=4.2;
+  for(let c=0;c<8;c++){
+    const s0=bs[c],e0=s0+((bs[c+1]-s0)*Q|0);END[c]=e0;tot+=e0-s0;
+    for(let i=s0;i<e0;i++){
+      let x,y,e2=0,m=0,sc=0;
+      if(TT<3.4){
+        const u=cl((TT-d1[i])/1.7),w1=1-u,e=1-w1*w1*w1,k=(1-e)*e*1.6*sg[i]*0.3;
+        x=sx[i]+(ax[i]-sx[i])*e-sy[i]*k;
+        y=sy[i]+(ay[i]-sy[i])*e+sx[i]*k;
+      }else if(TT<4.9){
+        const u=cl((TT-3.4)/1.3),w1=1-u,e=1-w1*w1*w1,cX=sx[i]*0.45,cY=sy[i]*0.45;
+        x=ax[i]+(cX-ax[i])*e;y=ay[i]+(cY-ay[i])*e;
+        sc=e;m=16*e*(1-e);
+      }else{
+        const u=cl((TT-4.9-d2[i])/3.0),cX=sx[i]*0.45,cY=sy[i]*0.45,a=2-2*u;
+        e2=u<.5?4*u*u*u:1-a*a*a/2;
+        x=cX+(bx[i]-cX)*e2;y=cY+(by[i]-cY)*e2;
+        sc=1-e2;m=22*e2*(1-e2);
       }
+      const pr=cl((TT-tSw-0.1-DL[i])/DUR),a3=2-2*pr;
+      const ee=pr*pr*(3-2*pr);
+      const B=ST[i]+(nmode-ST[i])*ee;BB[i]=B;
+      if(B>0.0005){
+        x+=(NX[i]-x)*B;y+=(NY[i]-y)*B;
+      }
+      let go=0;
+      if(pr<1){
+        go=Math.sin(3.14159*Math.pow(pr,0.7));
+        if(go>0.001){
+          const sxv=nmode?bx[i]:NX[i],syv=nmode?by[i]:NY[i],rn=Math.sqrt(sxv*sxv+syv*syv)+1e-3,ang=(ph[i]-3.14)*0.12,ca=Math.cos(ang),sa=Math.sin(ang);
+          const am2=go*0.55*lv[i],ux=(sxv*ca-syv*sa)/rn,uy=(sxv*sa+syv*ca)/rn;x+=ux*am2;y+=uy*am2;
+        }
+      }
+      const am=0.006+0.03*sc;
+      x+=Math.sin(TT*2.1+ph[i])*am;y+=Math.cos(TT*1.7+ph[i])*am;
+      const r=Math.sqrt(x*x+y*y)+1e-4;
+      let vx=VX[i],vy=VY[i],ox=OX[i],oy=OY[i],hit=false;
+      const mv=(ox*ox+oy*oy+vx*vx+vy*vy)>1e-9;
+      const X0=cx+(x+ox)*U,Y0=cy+(y+oy)*U;
+      if(act){
+        const qx=X0-px,qy=Y0-py,q2=qx*qx+qy*qy;
+        if(q2<R2){
+          hit=true;
+          const q=Math.sqrt(q2)+0.001,g=1-q/R,w=g*g*dt*PM[i],k1=Math.min(1,w*9);
+          vx+=qx/q*w*70+(pU-vx)*k1;
+          vy+=qy/q*w*70+(pV-vy)*k1;
+        }
+      }
+      let wt=0,spd=0;
+      if(hit||mv){
+        const kk=KS[i];
+        vx+=(-ox*kk-vx*1.3)*dt;vy+=(-oy*kk-vy*1.3)*dt;
+        ox+=vx*dt;oy+=vy*dt;
+        VX[i]=vx;VY[i]=vy;OX[i]=ox;OY[i]=oy;if(ox*ox+oy*oy>DT2)far++;
+        spd=Math.sqrt(vx*vx+vy*vy);wt=spd/0.35;if(wt>1)wt=1;
+      }
+      const len=(1.5+(i<9000?0:6*e2)*lv[i]+m*lv[i]+(10*B*(1-B)+8*go)*lv[i])*(1-0.35*B);
+      if(wt>0){
+        const inv=wt/(spd+1e-4),tl=1.5+Math.min(spd*U*0.035,16);
+        DX[i]=(x/r)*(1-wt)-vx*inv;DY[i]=(y/r)*(1-wt)-vy*inv;
+        L[i]=len*(1-wt)+tl*wt;
+      }else{DX[i]=x/r;DY[i]=y/r;L[i]=len;}
+      if(pr>0&&pr<1){
+        const wx=X0-X[i],wy=Y0-Y[i],vm=Math.sqrt(wx*wx+wy*wy);
+        if(vm>0.4){const tw=Math.min(1,vm/2.5);DX[i]=DX[i]*(1-tw)-wx/vm*tw;DY[i]=DY[i]*(1-tw)-wy/vm*tw;}
+      }
+      X[i]=X0;Y[i]=Y0;
     }
-    const kk=KS[i];
-    VX[i]+=(-OX[i]*kk-VX[i]*1.3)*dt;VY[i]+=(-OY[i]*kk-VY[i]*1.3)*dt;
-    OX[i]+=VX[i]*dt;OY[i]+=VY[i]*dt;
-    const spd=Math.hypot(VX[i],VY[i]),wt=cl(spd/0.35);
-    const len=1.5+(i<9000?0:6*e2)*lv[i]+m*lv[i];
-    const tl=1.5+Math.min(spd*U*0.035,16);
-    DX[i]=(x/r)*(1-wt)-(VX[i]/(spd+1e-4))*wt;
-    DY[i]=(y/r)*(1-wt)-(VY[i]/(spd+1e-4))*wt;
-    X[i]=X0;Y[i]=Y0;L[i]=len*(1-wt)+tl*wt;
-    // direction stored implicitly: radial
-    sx[i]=sx[i]; // no-op keeps arrays monomorphic
-    ph[i]=ph[i];
-    lv[i]=lv[i];
-    d1[i]=d1[i];
-    // store radial dir in temp via closure arrays below
-    
   }
+  if(T>9){const fr=far/tot;
+    if(armed&&fr>FT&&T-tSw>4.9){armed=false;lastSw=T;cnt++;const tg=(cnt%4===0)?1:0;if(tg!==nmode){nmode=tg;for(let i=0;i<N;i++)ST[i]=BB[i];tSw=T;}}
+    else if(!armed&&(fr<0.04||(T-lastSw>2.5&&fr<FT*0.5)))armed=true;}
   ctx.globalCompositeOperation='lighter';
   const spv=cl((T-6.5)/3);
   if(spv>0){
@@ -168,14 +223,16 @@ function frame0(ts){
   ctx.lineWidth=1.3;ctx.lineCap='round';
   for(let c=0;c<8;c++){
     ctx.globalAlpha=c>=5?0.4:0.55;ctx.strokeStyle=cols[c];ctx.beginPath();
-    for(let i=bs[c];i<bs[c+1];i++){
+    for(let i=bs[c],e0=END[c];i<e0;i++){
       ctx.moveTo(X[i],Y[i]);ctx.lineTo(X[i]+DX[i]*L[i],Y[i]+DY[i]*L[i]);
     }
     ctx.stroke();
   }
+  return performance.now()-w0;
 }
 const DX=f(),DY=f(),OX=f(),OY=f(),VX=f(),VY=f(),PM=f(),KS=f();
 for(let i=0;i<N;i++){PM[i]=0.6+Math.random()*0.8;KS[i]=1.0+Math.random()*1.2;}
+const BB=f(),ST=f(),DL=f();for(let i=0;i<N;i++)DL[i]=Math.random()*0.5;
 let pvx=0,pvy=0,lt=0,lastTs=0;
 const NS=180,SX=new Float32Array(NS),SY=new Float32Array(NS),SP=new Float32Array(NS),SS=new Float32Array(NS),SZ=new Float32Array(NS),SB=new Float32Array(NS),SC=[];
 const SCOL=['#ffffff','#dce8ff','#fff1dc','#ffd9e8'];
@@ -193,6 +250,78 @@ cv.addEventListener('pointerdown',e=>{
 });
 cv.addEventListener('pointerup',()=>{if(matchMedia('(pointer:coarse)').matches){px=py=-999;}});
 resize();init();requestAnimationFrame(frame);setTimeout(resize,200);
+</script>
+<script>
+(function(){
+try{
+let AC,master,noiseBuf,nGain,nFilt,muted=false,lastPing=0,lastBuzz=0,lmx=0,lmy=0,lmt=0,lastMove=0,speed=0;
+const hapL=document.getElementById('hapL'),btn=document.getElementById('mute');
+const MEL=[440,523.25,659.25,587.33,523.25,659.25,783.99,659.25,698.46,659.25,587.33,523.25,493.88,523.25,440,329.63];let mi=0;
+function nextNote(){const f=MEL[mi]*0.5;mi=(mi+1)%MEL.length;return f;}
+function buzz(ms){
+  if(muted)return;
+  if(navigator.vibrate){navigator.vibrate(ms);return;}
+  try{hapL.click();}catch(e){}
+}
+function audioInit(){
+  if(AC){if(AC.state!=='running')AC.resume();return;}
+  const A=window.AudioContext||window.webkitAudioContext;if(!A)return;
+  AC=new A();master=AC.createGain();master.gain.value=muted?0:0.4;const lp=AC.createBiquadFilter();lp.type='lowpass';lp.frequency.value=1800;lp.Q.value=0.4;master.connect(lp);lp.connect(AC.destination);
+  const len=AC.sampleRate*2;noiseBuf=AC.createBuffer(1,len,AC.sampleRate);
+  const d=noiseBuf.getChannelData(0);for(let i=0;i<len;i++)d[i]=Math.random()*2-1;
+  const src=AC.createBufferSource();src.buffer=noiseBuf;src.loop=true;
+  nFilt=AC.createBiquadFilter();nFilt.type='bandpass';nFilt.frequency.value=900;nFilt.Q.value=0.5;
+  nGain=AC.createGain();nGain.gain.value=0;
+  src.connect(nFilt);nFilt.connect(nGain);nGain.connect(master);src.start();
+  if(AC.state!=='running')AC.resume();
+}
+function ping(f,vol,when){
+  const t=AC.currentTime+(when||0);
+  [[f,1],[f*2,0.08]].forEach(([fr,m])=>{
+    const o=AC.createOscillator(),g=AC.createGain();o.type='sine';o.frequency.value=fr;
+    g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(vol*m,t+0.04);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+1.1);
+    o.connect(g);g.connect(master);o.start(t);o.stop(t+1.15);
+  });
+}
+function burst(){
+  const t=AC.currentTime;
+  const o=AC.createOscillator(),g=AC.createGain();o.type='sine';
+  o.frequency.setValueAtTime(120,t);o.frequency.exponentialRampToValueAtTime(48,t+0.45);
+  g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(0.5,t+0.03);g.gain.exponentialRampToValueAtTime(0.0001,t+0.5);
+  o.connect(g);g.connect(master);o.start(t);o.stop(t+0.5);
+  const n=AC.createBufferSource();n.buffer=noiseBuf;const bf=AC.createBiquadFilter();bf.type='bandpass';bf.Q.value=0.6;
+  bf.frequency.setValueAtTime(1100,t);bf.frequency.exponentialRampToValueAtTime(180,t+0.6);
+  const ng=AC.createGain();ng.gain.setValueAtTime(0.0001,t);ng.gain.exponentialRampToValueAtTime(0.22,t+0.08);ng.gain.exponentialRampToValueAtTime(0.0001,t+0.7);
+  n.connect(bf);bf.connect(ng);ng.connect(master);n.start(t);n.stop(t+0.65);
+  [220,261.63,329.63,440].forEach((f,i)=>ping(f,0.07,0.04+i*0.08));
+}
+cv.addEventListener('pointerdown',e=>{
+  audioInit();
+  lmx=e.clientX;lmy=e.clientY;lmt=performance.now();lastMove=lmt;
+  if(AC&&!muted&&T>9){burst();buzz(28);setTimeout(()=>buzz(14),70);}
+});
+cv.addEventListener('pointermove',e=>{
+  const n=performance.now(),dt=Math.max(8,n-lmt)/1000;
+  const sp=Math.hypot(e.clientX-lmx,e.clientY-lmy)/dt;
+  speed=speed*0.6+sp*0.4;lmx=e.clientX;lmy=e.clientY;lmt=n;lastMove=n;
+  if(!AC||muted||T<=9)return;
+  const k=Math.min(speed/2600,1);
+  nGain.gain.setTargetAtTime(k*0.06,AC.currentTime,0.05);
+  nFilt.frequency.setTargetAtTime(300+speed*0.25,AC.currentTime,0.06);
+  if(speed>650&&n-lastPing>170){lastPing=n;ping(nextNote(),0.035+k*0.035);}
+  if(speed>500&&n-lastBuzz>75){lastBuzz=n;buzz(8);}
+});
+function calm(){if(AC&&nGain)nGain.gain.setTargetAtTime(0,AC.currentTime,0.08);}
+cv.addEventListener('pointerup',calm);cv.addEventListener('pointerleave',calm);cv.addEventListener('pointercancel',calm);
+setInterval(()=>{if(performance.now()-lastMove>90){speed=0;calm();}},80);
+btn.addEventListener('click',()=>{
+  audioInit();muted=!muted;btn.textContent=muted?'🔇':'🔊';
+  if(master)master.gain.setTargetAtTime(muted?0:0.4,AC.currentTime,0.03);
+});
+document.addEventListener('visibilitychange',()=>{if(AC){document.hidden?AC.suspend():AC.resume();}});
+}catch(err){console.error(err);}
+})();
 </script>
 </body>
 </html>
